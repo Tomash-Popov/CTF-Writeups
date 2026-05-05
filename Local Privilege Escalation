@@ -1,0 +1,69 @@
+SUID Privilege Escalation via Environment Variable Injection
+
+Author: Tomash Popov
+
+Target: Local Privilege Escalation (aphrodite -> ariadne) Hackmyvm.eu
+
+Technique: Command Injection, Environment Variable Manipulation, SUID Exploitation
+📌 Challenge Overview
+
+The objective of this challenge is to escalate privileges from the initial user (aphrodite) to the target user (ariadne) on the hades machine. The critical clue is a custom SUID binary named homecontent, which we must exploit without the aid of standard debugging tools like strings or ltrace.
+🔍 Enumeration & Black-Box Analysis
+
+Upon accessing the system as aphrodite, I checked the contents of the current directory and reviewed the objective in mission.txt:
+
+    "The user ariadne knows what we keep in our HOME."
+
+The directory contained the following files:
+
+    ariadne_pass.txt (Target file, likely lacking read permissions for aphrodite)
+
+    flagz.txt
+
+    homecontent (SUID binary)
+
+    mission.txt
+
+Running the binary natively produced the following output:
+Bash
+
+aphrodite@hades:/pwned/aphrodite$ ./homecontent
+The content of your HOME is:
+ariadne_pass.txt  flagz.txt  homecontent  mission.txt
+
+The Constraint
+
+A significant hurdle in this challenge was the restricted environment. Standard binary analysis tools (ltrace, strace, strings) were unavailable or restricted. I had to treat the binary as a black box and deduce its internal mechanics based on inputs and outputs.
+Hypothesis
+
+Observing the output, the binary prints "The content of your HOME is:" followed by a directory listing. It strongly suggests the binary is executing a system command akin to:
+Bash
+
+echo "The content of your HOME is:"
+ls $HOME
+
+Because the binary has the SUID bit set, it executes this underlying command with the privileges of its owner (presumably ariadne or root). If the binary does not sanitize the $HOME environment variable before passing it to the system shell, it is vulnerable to command injection.
+🎯 Exploitation
+
+To test this hypothesis, I attempted to manipulate the $HOME environment variable. By injecting a command separator (;), I could force the binary to execute a secondary command of my choosing under its elevated context.
+
+Instead of passing a valid directory, I crafted the HOME variable to terminate the expected ls command and append a cat command aimed at the target password file.
+
+Payload Construction:
+Bash
+
+export HOME="; cat ariadne_pass.txt"
+
+Execution:
+Bash
+
+aphrodite@hades:/pwned/aphrodite$ ./homecontent
+The content of your HOME is:
+ariadne_pass.txt  flagz.txt  homecontent  mission.txt
+iNgNazuJrmhJKWixktzk
+
+💡 Conclusion
+
+The vulnerability stems from the SUID binary insecurely calling system commands using user-controlled environment variables ($HOME). By injecting the ; character, the shell interpreted the variable as two separate instructions: ls "" and cat ariadne_pass.txt.
+
+Because the binary was executing with SUID privileges, the cat command successfully bypassed the file read restrictions, dumping the password iNgNazuJrmhJKWixktzk and allowing lateral movement to the ariadne user.
