@@ -1,0 +1,54 @@
+CTF Write-up: Encrypted
+📝 Summary
+
+Encrypted is a very straightforward and beginner-friendly room. It took me about 10 minutes to fully compromise the machine. The attack path involves extracting leaked credentials from an SSL certificate for initial access, followed by exploiting a recent kernel vulnerability (DirtyClone / CVE-2026-43503) to escalate privileges to root.
+🔍 Enumeration
+
+I started the box with a standard port scan, which revealed two open ports:
+
+    Port 22: SSH
+
+    Port 443: HTTPS
+
+While investigating the web server on port 443, I inspected the SSL/TLS certificate details. Often, developers leave sensitive information in the certificate fields. In this case, I found a hardcoded set of credentials hidden inside the certificate:
+Credentials found: iot:Goat123!
+💻 Initial Access (User)
+
+With a valid username and password in hand, I immediately connected to the target machine via SSH:
+Bash
+
+ssh iot@<TARGET_IP>
+# Password: Goat123!
+
+The login was successful, granting me access as the iot user, where I was able to read the user.txt flag.
+🛡️ Privilege Escalation (Root)
+
+Once inside the machine, I began local enumeration (I transferred linpeas.sh and pspy64 to the box to hunt for vectors). I quickly discovered that the system kernel was vulnerable to DirtyClone (CVE-2026-43503).
+
+I downloaded the C exploit code for CVE-2026-43503 onto the target machine and compiled it using gcc:
+Bash
+
+iot@encrypt:~$ gcc -O0 -Wall -static -o DirtyClone CVE-2026-43503.c -lutil
+
+After compiling the payload, I simply executed the resulting binary:
+Bash
+
+iot@encrypt:~$ ./DirtyClone
+=== DirtyClone (CVE-2026-43503) PoC by Ashraf Zaryouh "0xBlackash" ===
+[*] uid=1000 euid=1000
+[+] /usr/bin/su page-cache patched successfully!
+[+] Success! Spawning root shell...
+#
+
+The exploit worked flawlessly, patching the page cache for /usr/bin/su and spawning a root shell.
+
+From there, it was just a matter of grabbing the final flag:
+Bash
+
+# cd /root
+# ls
+root.txt
+# cat root.txt
+bc06e6ee33aee532901fc6cd2926ea0789751a6bfd47f7dea5654cdf68418b85
+
+Pwned! 🚩
